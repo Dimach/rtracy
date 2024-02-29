@@ -21,12 +21,15 @@ struct ServerContext<'l> {
     locations: &'l Vec<SourceLocation>,
     strings: &'l HashMap<u64, String>,
     events_data: BufReader<File>,
+    skip_frames: u64,
+    limit_frames: u64,
 }
 
 impl ServerContext<'_> {
     fn process_client(&mut self) -> Result<(), String> {
         self.socket.set_nonblocking(true).map_err(|e| format!("{}", e))?;
-        let mut read_frames = 0;
+        let mut read_event = 0;
+        let mut frame = 0;
         loop {
             let e1: Result<UTracyEvent, DecodeError> = bincode::decode_from_reader(&mut self.events_data, BINCODE_CONFIG);
             if e1.is_err() {
@@ -37,45 +40,57 @@ impl ServerContext<'_> {
             unsafe {
                 match event.event_type {
                     EventType::Begin => {
-                        self.check_thread(event.event.begin.thread_id);
-                        self.send_message(NetworkZoneBegin {
-                            query_type: QueryResponseType::ZoneBegin,
-                            timestamp: event.event.begin.timestamp - self.timestamp,
-                            source_location: event.event.begin.source_location.into(),
-                        })?;
-                        self.timestamp = event.event.begin.timestamp;
+                        if frame > self.skip_frames {
+                            self.check_thread(event.event.begin.thread_id);
+                            self.send_message(NetworkZoneBegin {
+                                query_type: QueryResponseType::ZoneBegin,
+                                timestamp: event.event.begin.timestamp - self.timestamp,
+                                source_location: event.event.begin.source_location.into(),
+                            })?;
+                            self.timestamp = event.event.begin.timestamp;
+                        }
                     }
                     EventType::End => {
-                        self.check_thread(event.event.begin.thread_id);
-                        self.send_message(NetworkZoneEnd {
-                            query_type: QueryResponseType::ZoneEnd,
-                            timestamp: event.event.end.timestamp - self.timestamp,
-                        })?;
-                        self.timestamp = event.event.end.timestamp;
+                        if frame > self.skip_frames {
+                            self.check_thread(event.event.begin.thread_id);
+                            self.send_message(NetworkZoneEnd {
+                                query_type: QueryResponseType::ZoneEnd,
+                                timestamp: event.event.end.timestamp - self.timestamp,
+                            })?;
+                            self.timestamp = event.event.end.timestamp;
+                        }
                     }
                     EventType::Color => {
-                        self.check_thread(event.event.begin.thread_id);
-                        self.send_message(NetworkZoneColor {
-                            query_type: QueryResponseType::ZoneColor,
-                            color_r: event.event.color.color[0],
-                            color_g: event.event.color.color[1],
-                            color_b: event.event.color.color[2],
-                        })?;
+                        if frame > self.skip_frames {
+                            self.check_thread(event.event.begin.thread_id);
+                            self.send_message(NetworkZoneColor {
+                                query_type: QueryResponseType::ZoneColor,
+                                color_r: event.event.color.color[0],
+                                color_g: event.event.color.color[1],
+                                color_b: event.event.color.color[2],
+                            })?;
+                        }
                     }
                     EventType::Mark => {
-                        self.send_message(NetworkFrameMark {
-                            query_type: QueryResponseType::FrameMarkMsg,
-                            timestamp: event.event.mark.timestamp,
-                            name: 0,
-                        })?;
+                        frame += 1;
+                        if frame > self.skip_frames {
+                            self.send_message(NetworkFrameMark {
+                                query_type: QueryResponseType::FrameMarkMsg,
+                                timestamp: event.event.mark.timestamp,
+                                name: 0,
+                            })?;
+                        }
+                        if frame > self.skip_frames + self.limit_frames {
+                            break;
+                        }
                     }
                 }
             }
-            read_frames += 1;
-            if read_frames > 10000 {
+            read_event += 1;
+            if read_event > 10000 {
                 self.flush_buffer()?;
                 self.process_query()?;
-                read_frames = 0;
+                read_event = 0;
             }
         }
         self.flush_buffer()?;
@@ -183,7 +198,7 @@ impl ServerContext<'_> {
     }
 }
 
-pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<SourceLocation>, strings: &HashMap<u64, String>, events_data: BufReader<File>) -> Result<(), String> {
+pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<SourceLocation>, strings: &HashMap<u64, String>, events_data: BufReader<File>, skip_frames: u32, limit_frames: u32) -> Result<(), String> {
     let mut reader = BufReader::new(&stream);
     let mut writer = BufWriter::new(&stream);
 
@@ -230,6 +245,8 @@ pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<S
         locations,
         strings,
         events_data,
+        skip_frames: skip_frames.into(),
+        limit_frames: limit_frames.into(),
     };
     context.process_client()?;
     stream.shutdown(Shutdown::Both).map_err(|e| format!("{}", e))?;

@@ -3,7 +3,7 @@ mod server;
 
 use std::{str, thread};
 use std::collections::HashMap;
-use std::net::TcpListener;
+use std::net::{SocketAddr, TcpListener};
 use std::io::SeekFrom;
 use std::fs::File;
 use std::io::BufReader;
@@ -13,20 +13,62 @@ use crate::server::handle_client;
 use crate::structs::{BINCODE_CONFIG, SourceLocation, UTracyHeader, UTracySourceLocation};
 
 
+const FILE_SIGNATURE: u64 = 0x6D64796361727475;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!("No input file supplied, exiting");
+        println!("Use: <file> [-p port] [-s skip_frames] [-l limit_frames]");
         return;
+    }
+
+    let mut port = 8086;
+    let mut skip_frames = 0u32;
+    let mut limit_frames = u32::MAX;
+
+    if args.len() > 2 {
+        if args.len() == 3 {
+            println!("Wrong option");
+            println!("Available options: -p port, -s skip_frames, -l limit_frames");
+        } else {
+            for i in 0..(args.len() - 2) / 2 {
+                match args[i * 2 + 2].as_str() {
+                    "-p" => {
+                        port = args[i * 2 + 3].parse().expect("Wrong input: -p");
+                    }
+                    "-s" => {
+                        skip_frames = args[i * 2 + 3].parse().expect("Wrong input: -s");
+                    }
+                    "-l" => {
+                        limit_frames = args[i * 2 + 3].parse().expect("Wrong input: -l");
+                    }
+                    _ => {
+                        println!("Wrong option {}", args[i * 2 + 3].as_str());
+                        println!("Available options: -p port, -s skip_frames, -l limit_frames");
+                    }
+                };
+            }
+        }
     }
 
     let mut file_reader = BufReader::new(File::open(&args[1]).expect("Error opening file"));
 
     let header: UTracyHeader = bincode::decode_from_reader(&mut file_reader, BINCODE_CONFIG).unwrap();
 
-    let location_count: u32 = bincode::decode_from_reader(&mut file_reader, BINCODE_CONFIG).unwrap();
+    if header.signature != FILE_SIGNATURE {
+        println!("Wrong utracy file signature, expected \"{FILE_SIGNATURE}\" got \"{}\"", header.signature);
+        return;
+    }
 
+    if header.version != 2 {
+        println!("Wrong utracy file version, expected 2 got {}", header.version);
+        return;
+    }
+
+    let location_count: u32 = bincode::decode_from_reader(&mut file_reader, BINCODE_CONFIG).unwrap();
     println!("Captured process: {}", str::from_utf8(&header.program_name).unwrap());
+
     println!("Found {} source locations", location_count);
     let mut locations = Vec::<SourceLocation>::with_capacity(location_count as usize);
     let mut strings = HashMap::<u64, String>::new();
@@ -69,9 +111,11 @@ fn main() {
     let header_ref = Box::leak(Box::new(header));
     let locations_ref = Box::leak(Box::new(locations));
     let strings_ref = Box::leak(Box::new(strings));
+    let skip_frames_ref = Box::leak(Box::new(skip_frames));
+    let limit_frames_ref = Box::leak(Box::new(limit_frames));
 
-    let listener = TcpListener::bind("0.0.0.0:8086").unwrap();
-    println!("Server listening on port 8086");
+    let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).unwrap();
+    println!("Server listening on port {port}");
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
@@ -79,7 +123,7 @@ fn main() {
                 let mut file_reader = BufReader::new(File::open(&args[1]).expect("Error opening file"));
                 file_reader.seek(SeekFrom::Start(events_position)).unwrap();
                 thread::spawn(|| {
-                    if let Err(msg) = handle_client(stream, header_ref, locations_ref, strings_ref, file_reader) {
+                    if let Err(msg) = handle_client(stream, header_ref, locations_ref, strings_ref, file_reader, *skip_frames_ref, *limit_frames_ref) {
                         println!("Client disconnected with error: {}", msg)
                     }
                 });
