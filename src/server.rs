@@ -8,7 +8,7 @@ use bincode::de::read::Reader;
 use bincode::Encode;
 use bincode::error::DecodeError;
 use bincode::error::DecodeError::Io;
-use crate::structs::{BINCODE_CONFIG, WriterBox, EventType, HandshakeStatus, SourceLocation, UTracyEvent, UTracyHeader, NetworkZoneBegin, NetworkZoneEnd, NetworkZoneColor, NetworkFrameMark, NetworkQuery, NetworkThreadContext, NetworkHeader, QueryResponseType, NetworkMessageSourceLocation, NetworkMessageString, U16SizeString, ServerQueryType};
+use crate::structs::{BINCODE_CONFIG, WriterBox, EventType, HandshakeStatus, SourceLocation, UTracyEvent, UTracyHeader, NetworkZoneBegin, NetworkZoneEnd, NetworkZoneColor, NetworkFrameMark, NetworkQuery, NetworkThreadContext, NetworkHeader, QueryResponseType, NetworkMessageSourceLocation, NetworkMessageString, U16SizeString, ServerQueryType, NetworkSourceCode};
 use lz4::block::compress;
 
 struct ServerContext<'l> {
@@ -134,7 +134,10 @@ impl ServerContext<'_> {
                     self.send_message(QueryResponseType::AckSymbolCodeNotAvailable)?;
                 }
                 ServerQueryType::ServerQuerySourceCode => {
-                    self.send_message(QueryResponseType::AckSourceCodeNotAvailable)?;
+                    self.send_message(NetworkSourceCode {
+                        query_type: QueryResponseType::AckSourceCodeNotAvailable,
+                        id: request.pointer as u32,
+                    })?;
                 }
                 ServerQueryType::ServerQueryDataTransfer | ServerQueryType::ServerQueryDataTransferPart => {
                     self.send_message(QueryResponseType::AckServerQueryNoop)?;
@@ -190,9 +193,9 @@ pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<S
         return Err(format!("Invalid client, expected \"TracyPrf\", got {}", std::str::from_utf8(&client_name).unwrap()));
     }
     let version: u32 = bincode::decode_from_reader(&mut reader, BINCODE_CONFIG).map_err(|e| format!("{}", e))?;
-    if version != 57 {
+    if version != 64 {
         writer.write(&[HandshakeStatus::HandshakeProtocolMismatch as u8]).map_err(|e| format!("{}", e))?;
-        return Err(format!("Invalid client version, expected 57, got {}", version));
+        return Err(format!("Invalid client version, expected 64, got {}", version));
     }
 
     writer.write(&[HandshakeStatus::HandshakeWelcome as u8]).map_err(|e| format!("{}", e))?;

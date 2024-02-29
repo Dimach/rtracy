@@ -267,6 +267,12 @@ pub struct NetworkThreadContext {
 }
 
 #[derive(Encode, Debug)]
+pub struct NetworkSourceCode {
+    pub query_type: QueryResponseType,
+    pub id: u32,
+}
+
+#[derive(Encode, Debug)]
 pub struct NetworkMessageSourceLocation {
     pub query_type: QueryResponseType,
     pub location: SourceLocation,
@@ -295,7 +301,6 @@ pub enum ServerQueryType {
     ServerQueryExternalName,
     ServerQuerySymbol,
     ServerQuerySymbolCode,
-    ServerQueryCodeLocation,
     ServerQuerySourceCode,
     ServerQueryDataTransfer,
     ServerQueryDataTransferPart,
@@ -366,16 +371,18 @@ pub enum QueryResponseType {
     GpuZoneBeginAllocSrcLocSerial,
     GpuZoneBeginAllocSrcLocCallstackSerial,
     GpuZoneEndSerial,
-    PlotData,
+    PlotDataInt,
+    PlotDataFloat,
+    PlotDataDouble,
     ContextSwitch,
     ThreadWakeup,
     GpuTime,
     GpuContextName,
     CallstackFrameSize,
     SymbolInformation,
-    CodeInformation,
     ExternalNameMetadata,
     SymbolCodeMetadata,
+    SourceCodeMetadata,
     FiberEnter,
     FiberLeave,
     Terminate,
@@ -390,6 +397,7 @@ pub enum QueryResponseType {
     FrameMarkMsg,
     FrameMarkMsgStart,
     FrameMarkMsgEnd,
+    FrameVsync,
     SourceLocation,
     LockAnnounce,
     LockTerminate,
@@ -401,6 +409,7 @@ pub enum QueryResponseType {
     GpuNewContext,
     CallstackFrame,
     SysTimeReport,
+    SysPowerReport,
     TidToPid,
     HwSampleCpuCycle,
     HwSampleInstructionRetired,
