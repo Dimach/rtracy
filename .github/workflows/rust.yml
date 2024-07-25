@@ -1,0 +1,45 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: Build (Debug)
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Build (release)
+      run: cargo build --target x86_64-unknown-linux-gnu --release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Linux Build
+        path: target/x86_64-unknown-linux-gnu/release/rtracy
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+    - name: Build (Debug)
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Build (release)
+      run: cargo build --target x86_64-pc-windows-msvc --release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Windows Build
+        path: target/x86_64-pc-windows-msvc/release/rtracy.exe

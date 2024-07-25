@@ -133,6 +133,7 @@ impl Decode for EventType {
 }
 
 #[derive(Decode, Copy, Clone, Debug)]
+#[allow(dead_code)]
 pub struct EventZoneBegin {
     pub thread_id: u32,
     pub source_location: u32,
@@ -140,6 +141,7 @@ pub struct EventZoneBegin {
 }
 
 #[derive(Decode, Copy, Clone, Debug)]
+#[allow(dead_code)]
 pub struct EventZoneEnd {
     pub thread_id: u32,
     _padding: u32,
@@ -147,6 +149,7 @@ pub struct EventZoneEnd {
 }
 
 #[derive(Decode, Copy, Clone, Debug)]
+#[allow(dead_code)]
 pub struct EventZoneColor {
     pub thread_id: u32,
     pub color: [u8; 4],
@@ -154,6 +157,7 @@ pub struct EventZoneColor {
 }
 
 #[derive(Decode, Copy, Clone, Debug)]
+#[allow(dead_code)]
 pub struct EventFrameMark {
     pub name: u32,
     _padding: u32,
@@ -226,6 +230,7 @@ pub struct NetworkHeader {
 }
 
 #[derive(Decode, Debug)]
+#[allow(dead_code)]
 pub struct NetworkQuery {
     pub query_type: ServerQueryType,
     pub pointer: u64,
