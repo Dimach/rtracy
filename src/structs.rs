@@ -112,8 +112,8 @@ pub struct SourceLocation {
 pub enum EventType {
     Begin = 15,
     End = 17,
-    Color = 62,
-    Mark = 64,
+    Color = 65,
+    Mark = 67,
 }
 
 bincode::impl_borrow_decode!(EventType);
@@ -295,10 +295,10 @@ pub enum ServerQueryType {
     ServerQueryFrameName,
     ServerQueryParameter,
     ServerQueryFiberName,
+    ServerQueryExternalName,
     // Items above are high priority. Split order must be preserved. See IsQueryPrio().
     ServerQueryDisconnect,
     ServerQueryCallstackFrame,
-    ServerQueryExternalName,
     ServerQuerySymbol,
     ServerQuerySymbolCode,
     ServerQuerySourceCode,
@@ -389,6 +389,7 @@ pub enum QueryResponseType {
     KeepAlive,
     ThreadContext,
     GpuCalibration,
+    GpuTimeSync,
     Crash,
     CrashReport,
     ZoneValidation,
