@@ -112,8 +112,8 @@ pub struct SourceLocation {
 pub enum EventType {
     Begin = 15,
     End = 17,
-    Color = 65,
-    Mark = 67,
+    Color = 62,
+    Mark = 64,
 }
 
 bincode::impl_borrow_decode!(EventType);

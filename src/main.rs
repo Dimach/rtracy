@@ -61,8 +61,8 @@ fn main() {
         return;
     }
 
-    if header.version != 3 {
-        println!("Wrong utracy file version, expected 3 got {}", header.version);
+    if header.version != 2 {
+        println!("Wrong utracy file version, expected 2 got {}", header.version);
         return;
     }
 
