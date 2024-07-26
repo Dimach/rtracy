@@ -208,9 +208,9 @@ pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<S
         return Err(format!("Invalid client, expected \"TracyPrf\", got {}", std::str::from_utf8(&client_name).unwrap()));
     }
     let version: u32 = bincode::decode_from_reader(&mut reader, BINCODE_CONFIG).map_err(|e| format!("{}", e))?;
-    if version != 64 {
+    if version != 66 {
         writer.write(&[HandshakeStatus::HandshakeProtocolMismatch as u8]).map_err(|e| format!("{}", e))?;
-        return Err(format!("Invalid client version, expected 64, got {}", version));
+        return Err(format!("Invalid client version, expected 66, got {}", version));
     }
 
     writer.write(&[HandshakeStatus::HandshakeWelcome as u8]).map_err(|e| format!("{}", e))?;
