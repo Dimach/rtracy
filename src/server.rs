@@ -33,7 +33,7 @@ impl ServerContext<'_> {
         loop {
             let e1: Result<UTracyEvent, DecodeError> = bincode::decode_from_reader(&mut self.events_data, BINCODE_CONFIG);
             if e1.is_err() {
-                println!("Read done");
+                println!("Reached end of file");
                 break;
             }
             let event = e1.unwrap();
@@ -94,7 +94,11 @@ impl ServerContext<'_> {
             }
         }
         self.flush_buffer()?;
-        while self.process_query()? {
+        println!("Sending done, wait 20 seconds to handle queries");
+        for _i in 0..2  {
+            if !self.process_query()? {
+                return Ok(());
+            }
             sleep(Duration::from_millis(10));
         }
 
