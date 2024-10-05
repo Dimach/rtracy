@@ -432,6 +432,7 @@ pub enum QueryResponseType {
     SingleStringData,
     SecondStringData,
     MemNamePayload,
+    ThreadGroupHint,
     StringData,
     ThreadName,
     PlotName,
