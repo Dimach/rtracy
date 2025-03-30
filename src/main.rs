@@ -8,51 +8,35 @@ use std::io::SeekFrom;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::prelude::*;
-use std::env;
+use clap::Parser;
 use crate::server::handle_client;
 use crate::structs::{BINCODE_CONFIG, SourceLocation, UTracyHeader, UTracySourceLocation};
 
 
 const FILE_SIGNATURE: u64 = 0x6D64796361727475;
 
+#[derive(Parser)]
+struct CLI {
+    /// Utracy snapshot file
+    file: String,
+
+    /// Port on which server will be run
+    #[arg(short, long, default_value_t = 8086)]
+    port: u16,
+
+    /// Amount of frames to skip from snapshot begin
+    #[arg(short, long, default_value_t = 0)]
+    skip: u32,
+
+    /// Limit amount of frames to be streamed
+    #[arg(short, long, default_value_t = u32::MAX)]
+    limit: u32,
+}
+
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("No input file supplied, exiting");
-        println!("Use: <file> [-p port] [-s skip_frames] [-l limit_frames]");
-        return;
-    }
+    let args = CLI::parse();
 
-    let mut port = 8086;
-    let mut skip_frames = 0u32;
-    let mut limit_frames = u32::MAX;
-
-    if args.len() > 2 {
-        if args.len() == 3 {
-            println!("Wrong option");
-            println!("Available options: -p port, -s skip_frames, -l limit_frames");
-        } else {
-            for i in 0..(args.len() - 2) / 2 {
-                match args[i * 2 + 2].as_str() {
-                    "-p" => {
-                        port = args[i * 2 + 3].parse().expect("Wrong input: -p");
-                    }
-                    "-s" => {
-                        skip_frames = args[i * 2 + 3].parse().expect("Wrong input: -s");
-                    }
-                    "-l" => {
-                        limit_frames = args[i * 2 + 3].parse().expect("Wrong input: -l");
-                    }
-                    _ => {
-                        println!("Wrong option {}", args[i * 2 + 3].as_str());
-                        println!("Available options: -p port, -s skip_frames, -l limit_frames");
-                    }
-                };
-            }
-        }
-    }
-
-    let mut file_reader = BufReader::new(File::open(&args[1]).expect("Error opening file"));
+    let mut file_reader = BufReader::new(File::open(&args.file).expect("Error opening file"));
 
     let header: UTracyHeader = bincode::decode_from_reader(&mut file_reader, BINCODE_CONFIG).unwrap();
 
@@ -111,16 +95,17 @@ fn main() {
     let header_ref = Box::leak(Box::new(header));
     let locations_ref = Box::leak(Box::new(locations));
     let strings_ref = Box::leak(Box::new(strings));
-    let skip_frames_ref = Box::leak(Box::new(skip_frames));
-    let limit_frames_ref = Box::leak(Box::new(limit_frames));
+    let file_name_ref = args.file.leak();
+    let skip_frames_ref = Box::leak(Box::new(args.skip));
+    let limit_frames_ref = Box::leak(Box::new(args.limit));
 
-    let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).unwrap();
-    println!("Server listening on port {port}");
+    let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], args.port))).unwrap();
+    println!("Server listening on port {}", args.port);
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 println!("New connection: {}", stream.peer_addr().unwrap());
-                let mut file_reader = BufReader::new(File::open(&args[1]).expect("Error opening file"));
+                let mut file_reader = BufReader::new(File::open(&file_name_ref).expect("Error opening file"));
                 file_reader.seek(SeekFrom::Start(events_position)).unwrap();
                 thread::spawn(|| {
                     if let Err(msg) = handle_client(stream, header_ref, locations_ref, strings_ref, file_reader, *skip_frames_ref, *limit_frames_ref) {
