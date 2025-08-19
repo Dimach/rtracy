@@ -1,17 +1,19 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io::Write;
-use bincode::enc::Encoder;
-use bincode::enc::write::Writer;
-use bincode::{Decode, Encode};
 use bincode::config::{Configuration, Fixint, LittleEndian};
-use bincode::de::Decoder;
 use bincode::de::read::Reader;
-use bincode::error::{DecodeError, EncodeError};
+use bincode::de::Decoder;
+use bincode::enc::write::Writer;
+use bincode::enc::Encoder;
 use bincode::error::AllowedEnumVariants::{Allowed, Range};
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::io::Write;
 
-pub const BINCODE_CONFIG: Configuration<LittleEndian, Fixint> = bincode::config::standard().with_little_endian().with_fixed_int_encoding();
+pub const BINCODE_CONFIG: Configuration<LittleEndian, Fixint> = bincode::config::standard()
+    .with_little_endian()
+    .with_fixed_int_encoding();
 
 #[derive(Debug)]
 pub struct U16SizeString<'l>(pub &'l String);
@@ -48,8 +50,8 @@ impl Encode for U32SizeString {
 
 bincode::impl_borrow_decode!(U32SizeString);
 
-impl Decode for U32SizeString {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<Context> Decode<Context> for U32SizeString {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = u32::decode(decoder)?;
         decoder.claim_container_read::<u8>(len as usize)?;
         let mut vec = Vec::new();
@@ -59,7 +61,7 @@ impl Decode for U32SizeString {
             Ok(result) => Ok(U32SizeString(result)),
             Err(e) => Err(DecodeError::Utf8 {
                 inner: e.utf8_error(),
-            })
+            }),
         };
     }
 }
@@ -118,8 +120,8 @@ pub enum EventType {
 
 bincode::impl_borrow_decode!(EventType);
 
-impl Decode for EventType {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<Context> Decode<Context> for EventType {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value = u8::decode(decoder)?;
         return match EventType::from_u8(value) {
             None => Err(DecodeError::UnexpectedVariant {
@@ -127,7 +129,7 @@ impl Decode for EventType {
                 allowed: &Allowed(&[15, 17, 62, 64]),
                 found: value.into(),
             }),
-            Some(v) => Ok(v)
+            Some(v) => Ok(v),
         };
     }
 }
@@ -173,8 +175,8 @@ pub union Event {
 
 bincode::impl_borrow_decode!(Event);
 
-impl Decode for Event {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<Context> Decode<Context> for Event {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         EventZoneBegin::decode(decoder).map(|t| Event { begin: t })
     }
 }
@@ -206,7 +208,10 @@ pub struct WriterBox<'l, W: Write>(pub &'l mut W);
 
 impl<W: Write> Writer for WriterBox<'_, W> {
     fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
-        self.0.write(bytes).map_err(|e| EncodeError::Io { inner: e, index: 0 }).map(|_| ())
+        self.0
+            .write(bytes)
+            .map_err(|e| EncodeError::Io { inner: e, index: 0 })
+            .map(|_| ())
     }
 }
 
@@ -312,21 +317,22 @@ pub enum ServerQueryType {
 }
 
 bincode::impl_borrow_decode!(ServerQueryType);
-impl Decode for ServerQueryType {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<Context> Decode<Context> for ServerQueryType {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let byte = u8::decode(decoder)?;
         match ServerQueryType::from_u8(byte) {
             None => {
                 const MAX_VALUE: u32 = ServerQueryType::ServerQueryDataTransferPart as u32;
                 Err(DecodeError::UnexpectedVariant {
                     type_name: "ServerQueryType",
-                    allowed: &Range { min: 0, max: MAX_VALUE },
+                    allowed: &Range {
+                        min: 0,
+                        max: MAX_VALUE,
+                    },
                     found: byte.into(),
                 })
             }
-            Some(val) => {
-                Ok(val)
-            }
+            Some(val) => Ok(val),
         }
     }
 }
