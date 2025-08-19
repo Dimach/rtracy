@@ -366,6 +366,8 @@ pub enum QueryResponseType {
     MemAllocCallstackNamed,
     MemFreeCallstack,
     MemFreeCallstackNamed,
+    MemDiscard,
+    MemDiscardCallstack,
     GpuZoneBegin,
     GpuZoneBeginCallstack,
     GpuZoneBeginAllocSrcLoc,
