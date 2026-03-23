@@ -1,15 +1,20 @@
+use crate::reader::ReadWrapper;
+use crate::structs::{
+    EventType, HandshakeStatus, NetworkFrameMark, NetworkHeader, NetworkMessageSourceLocation,
+    NetworkMessageString, NetworkQuery, NetworkSourceCode, NetworkThreadContext, NetworkZoneBegin,
+    NetworkZoneColor, NetworkZoneEnd, QueryResponseType, ServerQueryType, SourceLocation,
+    U16SizeString, UTracyEvent, UTracyHeader, WriterBox, BINCODE_CONFIG,
+};
+use bincode::de::read::Reader;
+use bincode::error::DecodeError;
+use bincode::error::DecodeError::Io;
+use bincode::Encode;
+use lz4::block::compress;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{BufReader, BufWriter, ErrorKind, Write};
 use std::net::{Shutdown, TcpStream};
 use std::thread::sleep;
 use std::time::Duration;
-use bincode::de::read::Reader;
-use bincode::Encode;
-use bincode::error::DecodeError;
-use bincode::error::DecodeError::Io;
-use crate::structs::{BINCODE_CONFIG, WriterBox, EventType, HandshakeStatus, SourceLocation, UTracyEvent, UTracyHeader, NetworkZoneBegin, NetworkZoneEnd, NetworkZoneColor, NetworkFrameMark, NetworkQuery, NetworkThreadContext, NetworkHeader, QueryResponseType, NetworkMessageSourceLocation, NetworkMessageString, U16SizeString, ServerQueryType, NetworkSourceCode};
-use lz4::block::compress;
 
 struct ServerContext<'l> {
     socket: &'l TcpStream,
@@ -20,18 +25,21 @@ struct ServerContext<'l> {
     timestamp: u64,
     locations: &'l Vec<SourceLocation>,
     strings: &'l HashMap<u64, String>,
-    events_data: BufReader<File>,
+    events_data: ReadWrapper<'static>,
     skip_frames: u64,
     limit_frames: u64,
 }
 
 impl ServerContext<'_> {
     fn process_client(&mut self) -> Result<(), String> {
-        self.socket.set_nonblocking(true).map_err(|e| format!("{}", e))?;
+        self.socket
+            .set_nonblocking(true)
+            .map_err(|e| format!("{}", e))?;
         let mut read_event = 0;
         let mut frame = 0;
         loop {
-            let e1: Result<UTracyEvent, DecodeError> = bincode::decode_from_reader(&mut self.events_data, BINCODE_CONFIG);
+            let e1: Result<UTracyEvent, DecodeError> =
+                bincode::decode_from_reader(&mut self.events_data, BINCODE_CONFIG);
             if e1.is_err() {
                 println!("Reached end of file");
                 break;
@@ -95,7 +103,7 @@ impl ServerContext<'_> {
         }
         self.flush_buffer()?;
         println!("Sending done, wait 20 seconds to handle queries");
-        for _i in 0..2  {
+        for _i in 0..2 {
             if !self.process_query()? {
                 return Ok(());
             }
@@ -118,7 +126,9 @@ impl ServerContext<'_> {
                 }
             }
             result.map_err(|e| format!("{}", e))?;
-            let request: NetworkQuery = bincode::decode_from_slice(&buffer, BINCODE_CONFIG).unwrap().0;
+            let request: NetworkQuery = bincode::decode_from_slice(&buffer, BINCODE_CONFIG)
+                .unwrap()
+                .0;
             match request.query_type {
                 ServerQueryType::ServerQueryTerminate => {
                     return Ok(false);
@@ -158,10 +168,13 @@ impl ServerContext<'_> {
                         id: request.pointer as u32,
                     })?;
                 }
-                ServerQueryType::ServerQueryDataTransfer | ServerQueryType::ServerQueryDataTransferPart => {
+                ServerQueryType::ServerQueryDataTransfer
+                | ServerQueryType::ServerQueryDataTransferPart => {
                     self.send_message(QueryResponseType::AckServerQueryNoop)?;
                 }
-                _ => { println!("Unknown request {:?}", request.query_type) }
+                _ => {
+                    println!("Unknown request {:?}", request.query_type)
+                }
             };
         }
         self.flush_buffer()?;
@@ -180,13 +193,22 @@ impl ServerContext<'_> {
         if self.encoder.0.is_empty() {
             return Ok(());
         }
-        self.socket.set_nonblocking(false).map_err(|e| format!("{}", e))?;
-        let result = compress(self.encoder.0.as_slice(), None, false).map_err(|e| format!("{}", e))?;
-        self.writer.write(&u32::to_le_bytes(result.len() as u32)).map_err(|e| format!("{}", e))?;
-        self.writer.write(result.as_slice()).map_err(|e| format!("{}", e))?;
+        self.socket
+            .set_nonblocking(false)
+            .map_err(|e| format!("{}", e))?;
+        let result =
+            compress(self.encoder.0.as_slice(), None, false).map_err(|e| format!("{}", e))?;
+        self.writer
+            .write(&u32::to_le_bytes(result.len() as u32))
+            .map_err(|e| format!("{}", e))?;
+        self.writer
+            .write(result.as_slice())
+            .map_err(|e| format!("{}", e))?;
         self.writer.flush().map_err(|e| format!("{}", e))?;
         self.encoder.0.clear();
-        self.socket.set_nonblocking(true).map_err(|e| format!("{}", e))?;
+        self.socket
+            .set_nonblocking(true)
+            .map_err(|e| format!("{}", e))?;
         return Ok(());
     }
 
@@ -194,47 +216,78 @@ impl ServerContext<'_> {
         if self.last_thread_id != thread_id {
             self.last_thread_id = thread_id;
             self.timestamp = 0;
-            bincode::encode_into_writer(NetworkThreadContext {
-                query_type: QueryResponseType::ThreadContext,
-                thread_id,
-            }, &mut self.encoder, BINCODE_CONFIG).unwrap();
+            bincode::encode_into_writer(
+                NetworkThreadContext {
+                    query_type: QueryResponseType::ThreadContext,
+                    thread_id,
+                },
+                &mut self.encoder,
+                BINCODE_CONFIG,
+            )
+            .unwrap();
         }
     }
 }
 
-pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<SourceLocation>, strings: &HashMap<u64, String>, events_data: BufReader<File>, skip_frames: u32, limit_frames: u32) -> Result<(), String> {
+pub fn handle_client(
+    stream: TcpStream,
+    header: &UTracyHeader,
+    locations: &Vec<SourceLocation>,
+    strings: &HashMap<u64, String>,
+    events_data: ReadWrapper<'static>,
+    skip_frames: u32,
+    limit_frames: u32,
+) -> Result<(), String> {
     let mut reader = BufReader::new(&stream);
     let mut writer = BufWriter::new(&stream);
 
     let mut client_name = [0u8; 8];
-    reader.read(&mut client_name).map_err(|e| format!("{}", e))?;
+    reader
+        .read(&mut client_name)
+        .map_err(|e| format!("{}", e))?;
     if std::str::from_utf8(&client_name).unwrap() != "TracyPrf" {
-        return Err(format!("Invalid client, expected \"TracyPrf\", got {}", std::str::from_utf8(&client_name).unwrap()));
+        return Err(format!(
+            "Invalid client, expected \"TracyPrf\", got {}",
+            std::str::from_utf8(&client_name).unwrap()
+        ));
     }
-    let version: u32 = bincode::decode_from_reader(&mut reader, BINCODE_CONFIG).map_err(|e| format!("{}", e))?;
+    let version: u32 =
+        bincode::decode_from_reader(&mut reader, BINCODE_CONFIG).map_err(|e| format!("{}", e))?;
     if version != 76 {
-        writer.write(&[HandshakeStatus::HandshakeProtocolMismatch as u8]).map_err(|e| format!("{}", e))?;
-        return Err(format!("Invalid client version, expected 76, got {}", version));
+        writer
+            .write(&[HandshakeStatus::HandshakeProtocolMismatch as u8])
+            .map_err(|e| format!("{}", e))?;
+        return Err(format!(
+            "Invalid client version, expected 76, got {}",
+            version
+        ));
     }
 
-    writer.write(&[HandshakeStatus::HandshakeWelcome as u8]).map_err(|e| format!("{}", e))?;
+    writer
+        .write(&[HandshakeStatus::HandshakeWelcome as u8])
+        .map_err(|e| format!("{}", e))?;
     writer.flush().map_err(|e| format!("{}", e))?;
-    bincode::encode_into_writer(NetworkHeader {
-        multiplier: header.multiplier,
-        init_begin: header.init_begin,
-        init_end: header.init_end,
-        resolution: header.resolution,
-        epoch: header.epoch,
-        exec_time: header.exec_time,
-        process_id: header.process_id,
-        sampling_period: header.sampling_period,
-        flags: header.flags,
-        cpu_arch: header.cpu_arch,
-        cpu_manufacturer: header.cpu_manufacturer,
-        cpu_id: header.cpu_id,
-        program_name: header.program_name,
-        host_info: header.host_info,
-    }, WriterBox(&mut writer), BINCODE_CONFIG).map_err(|e| format!("{}", e))?;
+    bincode::encode_into_writer(
+        NetworkHeader {
+            multiplier: header.multiplier,
+            init_begin: header.init_begin,
+            init_end: header.init_end,
+            resolution: header.resolution,
+            epoch: header.epoch,
+            exec_time: header.exec_time,
+            process_id: header.process_id,
+            sampling_period: header.sampling_period,
+            flags: header.flags,
+            cpu_arch: header.cpu_arch,
+            cpu_manufacturer: header.cpu_manufacturer,
+            cpu_id: header.cpu_id,
+            program_name: header.program_name,
+            host_info: header.host_info,
+        },
+        WriterBox(&mut writer),
+        BINCODE_CONFIG,
+    )
+    .map_err(|e| format!("{}", e))?;
     writer.flush().map_err(|e| format!("{}", e))?;
 
     let mut buffer = Vec::new();
@@ -252,7 +305,9 @@ pub fn handle_client(stream: TcpStream, header: &UTracyHeader, locations: &Vec<S
         limit_frames: limit_frames.into(),
     };
     context.process_client()?;
-    stream.shutdown(Shutdown::Both).map_err(|e| format!("{}", e))?;
+    stream
+        .shutdown(Shutdown::Both)
+        .map_err(|e| format!("{}", e))?;
 
     return Ok(());
 }
