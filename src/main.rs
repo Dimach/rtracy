@@ -40,8 +40,6 @@ fn main() {
     let header: UTracyHeader =
         bincode::decode_from_reader(&mut file_reader, BINCODE_CONFIG).unwrap();
 
-    dbg!(&header);
-
     if header.signature != FILE_SIGNATURE {
         println!(
             "Wrong utracy file signature, expected \"{FILE_SIGNATURE}\" got \"{}\"",
