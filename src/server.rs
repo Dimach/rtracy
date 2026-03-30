@@ -110,7 +110,7 @@ impl ServerContext<'_> {
             sleep(Duration::from_millis(10));
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn process_query(&mut self) -> Result<bool, String> {
@@ -178,7 +178,7 @@ impl ServerContext<'_> {
             };
         }
         self.flush_buffer()?;
-        return Ok(true);
+        Ok(true)
     }
 
     fn send_message<W: Encode>(&mut self, message: W) -> Result<(), String> {
@@ -186,7 +186,7 @@ impl ServerContext<'_> {
             self.flush_buffer()?
         }
         bincode::encode_into_writer(message, &mut self.encoder, BINCODE_CONFIG).unwrap();
-        return Ok(());
+        Ok(())
     }
 
     fn flush_buffer(&mut self) -> Result<(), String> {
@@ -209,7 +209,7 @@ impl ServerContext<'_> {
         self.socket
             .set_nonblocking(true)
             .map_err(|e| format!("{}", e))?;
-        return Ok(());
+        Ok(())
     }
 
     fn check_thread(&mut self, thread_id: u32) {
@@ -309,5 +309,5 @@ pub fn handle_client(
         .shutdown(Shutdown::Both)
         .map_err(|e| format!("{}", e))?;
 
-    return Ok(());
+    Ok(())
 }

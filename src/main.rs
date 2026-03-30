@@ -1,3 +1,4 @@
+#![allow(clippy::enum_variant_names)]
 mod reader;
 mod server;
 mod structs;
@@ -14,7 +15,7 @@ use std::{str, thread};
 const FILE_SIGNATURE: u64 = 0x6D64796361727475;
 
 #[derive(Parser)]
-struct CLI {
+struct CliArgs {
     /// Utracy snapshot file
     file: String,
 
@@ -32,7 +33,7 @@ struct CLI {
 }
 
 fn main() {
-    let args = CLI::parse();
+    let args = CliArgs::parse();
 
     let mut file_reader = reader::ReadWrapper::open(&args.file);
 
