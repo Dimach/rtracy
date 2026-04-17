@@ -31,12 +31,12 @@ pub struct U32SizeString(pub String);
 
 impl U32SizeString {
     pub fn get_hash(&self) -> u64 {
-        if self.0.len() == 0 {
+        if self.0.is_empty() {
             return 0;
         }
         let mut hasher = DefaultHasher::new();
         self.0.hash(&mut hasher);
-        return hasher.finish();
+        hasher.finish()
     }
 }
 
@@ -54,15 +54,14 @@ impl<Context> Decode<Context> for U32SizeString {
     fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let len = u32::decode(decoder)?;
         decoder.claim_container_read::<u8>(len as usize)?;
-        let mut vec = Vec::new();
-        vec.resize(len as usize, 0u8);
+        let mut vec = vec![0; len as usize];
         decoder.reader().read(&mut vec)?;
-        return match String::from_utf8(vec) {
+        match String::from_utf8(vec) {
             Ok(result) => Ok(U32SizeString(result)),
             Err(e) => Err(DecodeError::Utf8 {
                 inner: e.utf8_error(),
             }),
-        };
+        }
     }
 }
 
@@ -123,14 +122,14 @@ bincode::impl_borrow_decode!(EventType);
 impl<Context> Decode<Context> for EventType {
     fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value = u8::decode(decoder)?;
-        return match EventType::from_u8(value) {
+        match EventType::from_u8(value) {
             None => Err(DecodeError::UnexpectedVariant {
                 type_name: "event_type",
                 allowed: &Allowed(&[15, 17, 62, 64]),
                 found: value.into(),
             }),
             Some(v) => Ok(v),
-        };
+        }
     }
 }
 
@@ -200,7 +199,7 @@ pub enum HandshakeStatus {
 
 impl Encode for HandshakeStatus {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        return self.to_u8().unwrap().encode(encoder);
+        self.to_u8().unwrap().encode(encoder)
     }
 }
 
@@ -460,6 +459,6 @@ pub enum QueryResponseType {
 
 impl Encode for QueryResponseType {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        return self.to_u8().unwrap().encode(encoder);
+        self.to_u8().unwrap().encode(encoder)
     }
 }
