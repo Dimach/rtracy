@@ -1,3 +1,4 @@
+use crate::UtracyFormat;
 use bincode::{de::read::Reader, error::DecodeError};
 use std::{
     fs::File,
@@ -11,10 +12,14 @@ pub enum ReadWrapper<'a> {
 }
 
 impl<'a> ReadWrapper<'a> {
-    pub fn open(file_name: impl AsRef<str>) -> Self {
+    pub fn open(file_name: impl AsRef<str>, format: UtracyFormat) -> Self {
         let file_name = file_name.as_ref();
         let file = File::open(file_name).expect("Error opening file");
-        if file_name.ends_with(".zst") {
+        if format == UtracyFormat::Uncompressed {
+            Self::Uncompressed(BufReader::new(file))
+        } else if format == UtracyFormat::Compressed {
+            Self::Compressed(Decoder::new(file).expect("zstd decoder setup failed"))
+        } else if file_name.ends_with(".zst") {
             Self::Compressed(Decoder::new(file).expect("zstd decoder setup failed"))
         } else {
             Self::Uncompressed(BufReader::new(file))

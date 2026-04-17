@@ -10,10 +10,18 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
+use clap::ValueEnum;
 
 pub const BINCODE_CONFIG: Configuration<LittleEndian, Fixint> = bincode::config::standard()
     .with_little_endian()
     .with_fixed_int_encoding();
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum UtracyFormat {
+    Compressed,
+    Uncompressed,
+    Auto,
+}
 
 #[derive(Debug)]
 pub struct U16SizeString<'l>(pub &'l String);

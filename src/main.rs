@@ -1,10 +1,11 @@
-#![allow(clippy::enum_variant_names)]
 mod reader;
 mod server;
 mod structs;
 
 use crate::server::handle_client;
-use crate::structs::{SourceLocation, UTracyHeader, UTracySourceLocation, BINCODE_CONFIG};
+use crate::structs::{
+    SourceLocation, UTracyHeader, UTracySourceLocation, UtracyFormat, BINCODE_CONFIG,
+};
 use clap::Parser;
 use std::collections::HashMap;
 use std::io::prelude::*;
@@ -30,12 +31,16 @@ struct CliArgs {
     /// Limit amount of frames to be streamed
     #[arg(short, long, default_value_t = u32::MAX)]
     limit: u32,
+
+    /// Utracy file format
+    #[arg(short, long, value_enum, default_value_t = UtracyFormat::Auto)]
+    format: UtracyFormat,
 }
 
 fn main() {
     let args = CliArgs::parse();
 
-    let mut file_reader = reader::ReadWrapper::open(&args.file);
+    let mut file_reader = reader::ReadWrapper::open(&args.file, args.format);
 
     let header: UTracyHeader =
         bincode::decode_from_reader(&mut file_reader, BINCODE_CONFIG).unwrap();
@@ -128,7 +133,7 @@ fn main() {
         match stream {
             Ok(stream) => {
                 println!("New connection: {}", stream.peer_addr().unwrap());
-                let mut file_reader = reader::ReadWrapper::open(&file_name_ref);
+                let mut file_reader = reader::ReadWrapper::open(&file_name_ref, args.format);
                 file_reader.seek(SeekFrom::Start(events_position)).unwrap();
                 thread::spawn(|| {
                     if let Err(msg) = handle_client(
