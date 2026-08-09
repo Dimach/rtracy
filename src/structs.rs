@@ -6,15 +6,19 @@ use bincode::enc::Encoder;
 use bincode::error::AllowedEnumVariants::{Allowed, Range};
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use clap::ValueEnum;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
-use clap::ValueEnum;
 
 pub const BINCODE_CONFIG: Configuration<LittleEndian, Fixint> = bincode::config::standard()
     .with_little_endian()
     .with_fixed_int_encoding();
+
+pub const PROTOCOL_VERSION: u32 = 82;
+pub const PROTOCOL_OFFSET_16BIT: i64 = 1 << 16;
+pub const PROTOCOL_OFFSET_32BIT: i64 = (1 << 16) + (1 << 32);
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum UtracyFormat {
@@ -251,14 +255,40 @@ pub struct NetworkQuery {
 #[derive(Encode, Debug)]
 pub struct NetworkZoneBegin {
     pub query_type: QueryResponseType,
-    pub timestamp: u64,
+    pub timestamp: i64,
+    pub source_location: u64,
+}
+
+#[derive(Encode, Debug)]
+pub struct NetworkZoneBegin32 {
+    pub query_type: QueryResponseType,
+    pub timestamp: u32,
+    pub source_location: u64,
+}
+
+#[derive(Encode, Debug)]
+pub struct NetworkZoneBegin16 {
+    pub query_type: QueryResponseType,
+    pub timestamp: u16,
     pub source_location: u64,
 }
 
 #[derive(Encode, Debug)]
 pub struct NetworkZoneEnd {
     pub query_type: QueryResponseType,
-    pub timestamp: u64,
+    pub timestamp: i64,
+}
+
+#[derive(Encode, Debug)]
+pub struct NetworkZoneEnd32 {
+    pub query_type: QueryResponseType,
+    pub timestamp: u32,
+}
+
+#[derive(Encode, Debug)]
+pub struct NetworkZoneEnd16 {
+    pub query_type: QueryResponseType,
+    pub timestamp: u16,
 }
 
 #[derive(Encode, Debug)]
@@ -358,11 +388,21 @@ pub enum QueryResponseType {
     Callstack,
     CallstackAlloc,
     CallstackSample,
+    CallstackSample32,
+    CallstackSample16,
     CallstackSampleContextSwitch,
+    CallstackSampleContextSwitch32,
+    CallstackSampleContextSwitch16,
     FrameImage,
     ZoneBegin,
+    ZoneBegin32,
+    ZoneBegin16,
     ZoneBeginCallstack,
+    ZoneBeginCallstack32,
+    ZoneBeginCallstack16,
     ZoneEnd,
+    ZoneEnd32,
+    ZoneEnd16,
     LockWait,
     LockObtain,
     LockRelease,
@@ -405,6 +445,9 @@ pub enum QueryResponseType {
     SourceCodeMetadata,
     FiberEnter,
     FiberLeave,
+    SectionEnter,
+    SectionLeave,
+    SectionSetup,
     Terminate,
     KeepAlive,
     ThreadContext,
@@ -446,6 +489,8 @@ pub enum QueryResponseType {
     CpuTopology,
     SingleStringData,
     SecondStringData,
+    SingleStringData8,
+    SecondStringData8,
     MemNamePayload,
     ThreadGroupHint,
     GpuZoneAnnotation,
