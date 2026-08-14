@@ -2,8 +2,10 @@ use crate::reader::ReadWrapper;
 use crate::structs::{
     EventType, HandshakeStatus, NetworkFrameMark, NetworkHeader, NetworkMessageSourceLocation,
     NetworkMessageString, NetworkQuery, NetworkSourceCode, NetworkThreadContext, NetworkZoneBegin,
-    NetworkZoneColor, NetworkZoneEnd, QueryResponseType, ServerQueryType, SourceLocation,
-    U16SizeString, UTracyEvent, UTracyHeader, WriterBox, BINCODE_CONFIG,
+    NetworkZoneBegin16, NetworkZoneBegin32, NetworkZoneColor, NetworkZoneEnd, NetworkZoneEnd16,
+    NetworkZoneEnd32, QueryResponseType, ServerQueryType, SourceLocation, U16SizeString,
+    UTracyEvent, UTracyHeader, WriterBox, BINCODE_CONFIG, PROTOCOL_OFFSET_16BIT,
+    PROTOCOL_OFFSET_32BIT, PROTOCOL_VERSION,
 };
 use bincode::de::read::Reader;
 use bincode::error::DecodeError;
@@ -22,7 +24,7 @@ struct ServerContext<'l> {
     writer: BufWriter<&'l TcpStream>,
     encoder: WriterBox<'l, Vec<u8>>,
     last_thread_id: u32,
-    timestamp: u64,
+    timestamp: i64,
     locations: &'l Vec<SourceLocation>,
     strings: &'l HashMap<u64, String>,
     events_data: ReadWrapper<'static>,
@@ -50,22 +52,16 @@ impl ServerContext<'_> {
                     EventType::Begin => {
                         if frame > self.skip_frames {
                             self.check_thread(event.event.begin.thread_id);
-                            self.send_message(NetworkZoneBegin {
-                                query_type: QueryResponseType::ZoneBegin,
-                                timestamp: event.event.begin.timestamp - self.timestamp,
-                                source_location: event.event.begin.source_location.into(),
-                            })?;
-                            self.timestamp = event.event.begin.timestamp;
+                            self.send_zone_begin(
+                                event.event.begin.timestamp as i64,
+                                event.event.begin.source_location.into(),
+                            )?;
                         }
                     }
                     EventType::End => {
                         if frame > self.skip_frames {
                             self.check_thread(event.event.begin.thread_id);
-                            self.send_message(NetworkZoneEnd {
-                                query_type: QueryResponseType::ZoneEnd,
-                                timestamp: event.event.end.timestamp - self.timestamp,
-                            })?;
-                            self.timestamp = event.event.end.timestamp;
+                            self.send_zone_end(event.event.end.timestamp as i64)?;
                         }
                     }
                     EventType::Color => {
@@ -181,6 +177,57 @@ impl ServerContext<'_> {
         Ok(true)
     }
 
+    // funky varint timestamp shit. don't think about it too hard.
+    fn send_zone_begin(&mut self, timestamp: i64, source_location: u64) -> Result<(), String> {
+        let dt = timestamp - self.timestamp;
+        self.timestamp = timestamp;
+        match dt {
+            ..0 => self.send_message(NetworkZoneBegin {
+                query_type: QueryResponseType::ZoneBegin,
+                timestamp: dt,
+                source_location,
+            }),
+            0..PROTOCOL_OFFSET_16BIT => self.send_message(NetworkZoneBegin16 {
+                query_type: QueryResponseType::ZoneBegin16,
+                timestamp: dt as u16,
+                source_location,
+            }),
+            PROTOCOL_OFFSET_16BIT..PROTOCOL_OFFSET_32BIT => self.send_message(NetworkZoneBegin32 {
+                query_type: QueryResponseType::ZoneBegin32,
+                timestamp: (dt - PROTOCOL_OFFSET_16BIT) as u32,
+                source_location,
+            }),
+            _ => self.send_message(NetworkZoneBegin {
+                query_type: QueryResponseType::ZoneBegin,
+                timestamp: dt - PROTOCOL_OFFSET_32BIT,
+                source_location,
+            }),
+        }
+    }
+
+    fn send_zone_end(&mut self, timestamp: i64) -> Result<(), String> {
+        let dt = timestamp - self.timestamp;
+        self.timestamp = timestamp;
+        match dt {
+            ..0 => self.send_message(NetworkZoneEnd {
+                query_type: QueryResponseType::ZoneEnd,
+                timestamp: dt,
+            }),
+            0..PROTOCOL_OFFSET_16BIT => self.send_message(NetworkZoneEnd16 {
+                query_type: QueryResponseType::ZoneEnd16,
+                timestamp: dt as u16,
+            }),
+            PROTOCOL_OFFSET_16BIT..PROTOCOL_OFFSET_32BIT => self.send_message(NetworkZoneEnd32 {
+                query_type: QueryResponseType::ZoneEnd32,
+                timestamp: (dt - PROTOCOL_OFFSET_16BIT) as u32,
+            }),
+            _ => self.send_message(NetworkZoneEnd {
+                query_type: QueryResponseType::ZoneEnd,
+                timestamp: dt - PROTOCOL_OFFSET_32BIT,
+            }),
+        }
+    }
+
     fn send_message<W: Encode>(&mut self, message: W) -> Result<(), String> {
         if self.encoder.0.len() > 250 * 1024 {
             self.flush_buffer()?
@@ -253,13 +300,12 @@ pub fn handle_client(
     }
     let version: u32 =
         bincode::decode_from_reader(&mut reader, BINCODE_CONFIG).map_err(|e| format!("{}", e))?;
-    if version != 76 {
+    if version != PROTOCOL_VERSION {
         writer
             .write(&[HandshakeStatus::HandshakeProtocolMismatch as u8])
             .map_err(|e| format!("{}", e))?;
         return Err(format!(
-            "Invalid client version, expected 76, got {}",
-            version
+            "Invalid client version, expected {PROTOCOL_VERSION}, got {version}"
         ));
     }
 
